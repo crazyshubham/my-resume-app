@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,17 +14,12 @@ import { UploadCloud, Send } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ACCEPTED_FILE_TYPES = ["text/plain"];
 
 const resumeUploadSchema = z.object({
   resumeFile: z
     .instanceof(File, { message: "Please select a file." })
     .refine((file) => file.size > 0, "File cannot be empty.")
-    .refine((file) => file.size <= MAX_FILE_SIZE, `File size should be less than 5MB.`)
-    .refine(
-      (file) => ACCEPTED_FILE_TYPES.includes(file.type),
-      "Invalid file type. Only .txt files are currently supported."
-    ),
+    .refine((file) => file.size <= MAX_FILE_SIZE, `File size should be less than 5MB.`),
 });
 
 type ResumeUploadFormValues = z.infer<typeof resumeUploadSchema>;
@@ -65,7 +61,7 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
         toast({ title: "Success!", description: "Skills extracted successfully." });
       } else {
         setExtractedSkills([]);
-        toast({ title: "No Skills Found", description: "Could not extract any skills from the resume." });
+        toast({ title: "No Skills Found", description: "Could not extract any skills from the resume. Ensure it's a text-based file for best results." });
       }
     } catch (error) {
       console.error("Skill extraction error:", error);
@@ -73,7 +69,7 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
       setError(errorMessage);
       toast({
         title: "Extraction Failed",
-        description: `Could not extract skills. ${errorMessage}`,
+        description: `Could not extract skills. This may be due to an unsupported file type or content. ${errorMessage}`,
         variant: "destructive",
       });
       setExtractedSkills([]);
@@ -81,6 +77,8 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
       setIsLoading(false);
     }
   };
+
+  const isButtonDisabled = form.formState.isSubmitting;
 
   return (
     <Card className="w-full max-w-lg shadow-lg">
@@ -90,7 +88,7 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
           <CardTitle className="text-2xl">Upload Your Resume</CardTitle>
         </div>
         <CardDescription>
-          Upload your resume as a .txt file to extract key skills. PDF support is planned for a future update.
+          Upload your resume file. While all file types are accepted for upload, skill extraction currently works best with text-based files (e.g., .txt, .pdf containing selectable text).
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -101,12 +99,11 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
               name="resumeFile"
               render={({ field: { onChange, value, ...rest } }) => (
                 <FormItem>
-                  <FormLabel htmlFor="resumeFile" className="text-base">Resume File (.txt)</FormLabel>
+                  <FormLabel htmlFor="resumeFile" className="text-base">Resume File</FormLabel>
                   <FormControl>
                     <Input
                       id="resumeFile"
                       type="file"
-                      accept=".txt"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         onChange(file || null);
@@ -121,9 +118,9 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={form.formState.isSubmitting || setIsLoading_isSectionLoading}>
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isButtonDisabled}>
               <Send className="mr-2 h-4 w-4" />
-              {form.formState.isSubmitting || setIsLoading_isSectionLoading ? "Extracting..." : "Extract Skills"}
+              {isButtonDisabled ? "Extracting..." : "Extract Skills"}
             </Button>
           </CardFooter>
         </form>
@@ -131,8 +128,3 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
     </Card>
   );
 }
-
-// Dummy variable to satisfy TS, actual loading state is passed as prop.
-// This is a workaround for the linter/compiler potentially complaining about unused state from parent.
-// In a real scenario, this would be managed more cleanly or the component structure might differ.
-const setIsLoading_isSectionLoading = false;
