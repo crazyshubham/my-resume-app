@@ -30,10 +30,16 @@ interface ResumeUploadSectionProps {
   setError: Dispatch<SetStateAction<string | null>>;
 }
 
-const UNSUPPORTED_MIME_TYPES_FOR_AI_EXTRACTION = [
-  'application/msword', // .doc
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document' // .docx
-  // Add other complex formats here if they are known to cause issues with the AI's media helper
+// Whitelist of MIME types generally supported by the AI model for content extraction via the media helper.
+// For skill extraction, PDF and TXT are primary.
+const SUPPORTED_MIME_TYPES_FOR_SKILL_EXTRACTION = [
+  'application/pdf',
+  'text/plain',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
 ];
 
 export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, setError }: ResumeUploadSectionProps) {
@@ -66,8 +72,8 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
       return;
     }
 
-    if (UNSUPPORTED_MIME_TYPES_FOR_AI_EXTRACTION.includes(file.type)) {
-      const errText = `File type '${file.type}' is not directly supported for AI skill extraction. Please convert your resume to PDF or a plain text (.txt) file and try again.`;
+    if (!SUPPORTED_MIME_TYPES_FOR_SKILL_EXTRACTION.includes(file.type)) {
+      const errText = `File type '${file.type}' is not directly supported for AI skill extraction. For best results, please use PDF or plain text (.txt) files. Other supported types for general AI processing include JPEG, PNG, WEBP, HEIC, HEIF.`;
       setError(errText);
       toast({
         title: "Unsupported File Type",
@@ -94,10 +100,10 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
     } catch (error) {
       console.error("Skill extraction error:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during skill extraction.";
-      setError(errorMessage);
+      setError(`Skill extraction failed: ${errorMessage}. This could be due to file content, size, or an AI processing issue.`);
       toast({
         title: "Extraction Failed",
-        description: `Could not extract skills. This may be due to an unsupported file type, content, or an AI processing issue. Supported types for direct extraction are PDF and plain text. ${errorMessage}`,
+        description: `Could not extract skills. This may be due to file content, size, or an AI processing issue. Supported types are PDF, TXT, JPEG, PNG, WEBP. ${errorMessage}`,
         variant: "destructive",
       });
       setExtractedSkills([]);
@@ -116,8 +122,9 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
           <CardTitle className="text-2xl">Upload Your Resume</CardTitle>
         </div>
         <CardDescription>
-          Upload your resume file. For best skill extraction results, please use <strong>PDF</strong> or <strong>plain text (.txt)</strong> files.
-          The AI will attempt to process the document and extract key skills. For PDFs, ensure they are not image-only scans.
+          Upload your resume file. For best skill extraction, use <strong>PDF</strong> or <strong>plain text (.txt)</strong> files.
+          Other supported types (JPEG, PNG, WEBP) can be processed but may not be ideal for resumes.
+          The AI will attempt to process the document and extract key skills.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -133,7 +140,7 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
                     <Input
                       id="resumeFile"
                       type="file"
-                      accept="*" // Still accept all, but filter in onSubmit
+                      accept={SUPPORTED_MIME_TYPES_FOR_SKILL_EXTRACTION.join(',')} 
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         onChange(file || null);
