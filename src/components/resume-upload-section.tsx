@@ -19,7 +19,7 @@ const resumeUploadSchema = z.object({
   resumeFile: z
     .instanceof(File, { message: "Please select a file." })
     .refine((file) => file.size > 0, "File cannot be empty.")
-    .refine((file) => file.size <= MAX_FILE_SIZE, `File size should be less than 5MB.`),
+    .refine((file) => file.size <= MAX_FILE_SIZE, `File size should be less than ${MAX_FILE_SIZE / (1024 * 1024)}MB.`),
 });
 
 type ResumeUploadFormValues = z.infer<typeof resumeUploadSchema>;
@@ -30,16 +30,14 @@ interface ResumeUploadSectionProps {
   setError: Dispatch<SetStateAction<string | null>>;
 }
 
-// Whitelist of MIME types generally supported by the AI model for content extraction via the media helper.
-// For skill extraction, PDF and TXT are primary.
+// Whitelist of MIME types. Prioritize PDF and TXT for skill extraction from resumes.
+// Other image types are supported by the AI model but may not be ideal for resumes.
 const SUPPORTED_MIME_TYPES_FOR_SKILL_EXTRACTION = [
-  'application/pdf',
-  'text/plain',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/heic',
-  'image/heif',
+  'application/pdf', // Best for resumes
+  'text/plain',      // Excellent for resumes
+  'image/jpeg',      // Supported by AI
+  'image/png',       // Supported by AI
+  'image/webp',      // Supported by AI
 ];
 
 export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, setError }: ResumeUploadSectionProps) {
@@ -66,14 +64,14 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
     setError(null);
 
     const file = data.resumeFile;
-    if (!file) {
+    if (!file) { // Should be caught by Zod, but defensive check
       toast({ title: "Error", description: "No file selected.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     if (!SUPPORTED_MIME_TYPES_FOR_SKILL_EXTRACTION.includes(file.type)) {
-      const errText = `File type '${file.type}' is not directly supported for AI skill extraction. For best results, please use PDF or plain text (.txt) files. Other supported types for general AI processing include JPEG, PNG, WEBP, HEIC, HEIF.`;
+      const errText = `File type '${file.type}' is not optimally supported for skill extraction. For best results, please use PDF or TXT files. JPEG, PNG, and WEBP are also accepted but may be less effective for resumes.`;
       setError(errText);
       toast({
         title: "Unsupported File Type",
@@ -95,16 +93,42 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
         toast({ title: "Success!", description: "Skills extracted successfully." });
       } else {
         setExtractedSkills([]);
-        toast({ title: "No Skills Found", description: "Could not extract any skills from the resume. The AI might not have found relevant skills or had trouble processing the file. Ensure your file is a clear PDF or text document." });
+        toast({ title: "No Skills Found", description: "The AI could not extract any skills from the resume. This might be due to the file's content or format. Please ensure your resume is clear and primarily text-based. PDF or TXT files work best." });
       }
     } catch (error) {
-      console.error("Skill extraction error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during skill extraction.";
-      setError(`Skill extraction failed: ${errorMessage}. This could be due to file content, size, or an AI processing issue.`);
+      console.error("Skill extraction error object:", error); // Log the raw error object for debugging
+
+      let detailedErrorMessage = "An unknown error occurred during skill extraction.";
+      let toastDescription = `Could not extract skills. This may be due to file content, format, or an internal AI processing issue. Please try a different file or ensure it's a standard PDF, TXT, JPG, PNG, or WEBP.`;
+
+      if (error instanceof Error) {
+        detailedErrorMessage = error.message;
+        // Check if the error message is the generic server component error
+        if (detailedErrorMessage.includes("An error occurred in the Server Components render")) {
+          detailedErrorMessage = "The server encountered an issue processing the file."; // More user-friendly
+          toastDescription = "The server had trouble processing your file. This can happen with very complex files or unsupported internal structures. Please try a simpler PDF or a plain text (.txt) file.";
+        } else {
+          toastDescription = `Extraction failed: ${detailedErrorMessage}. Please check the file and try again. PDF or TXT files are recommended.`;
+        }
+      } else if (typeof error === 'string') {
+        detailedErrorMessage = error;
+        toastDescription = `Extraction failed: ${detailedErrorMessage}. Please check the file and try again.`;
+      } else if (error && typeof error === 'object' && 'message' in error && typeof (error as any).message === 'string') {
+        detailedErrorMessage = (error as any).message;
+        if (detailedErrorMessage.includes("An error occurred in the Server Components render")) {
+            detailedErrorMessage = "The server encountered an issue processing the file.";
+            toastDescription = "The server had trouble processing your file. This can happen with very complex files or unsupported internal structures. Please try a simpler PDF or a plain text (.txt) file.";
+        } else {
+            toastDescription = `Extraction failed: ${detailedErrorMessage}. Please check the file and try again. PDF or TXT files are recommended.`;
+        }
+      }
+      
+      setError(`Skill extraction failed: ${detailedErrorMessage}.`);
       toast({
         title: "Extraction Failed",
-        description: `Could not extract skills. This may be due to file content, size, or an AI processing issue. Supported types are PDF, TXT, JPEG, PNG, WEBP. ${errorMessage}`,
+        description: toastDescription,
         variant: "destructive",
+        duration: 7000, // Longer duration for error messages
       });
       setExtractedSkills([]);
     } finally {
@@ -122,9 +146,9 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
           <CardTitle className="text-2xl">Upload Your Resume</CardTitle>
         </div>
         <CardDescription>
-          Upload your resume file. For best skill extraction, use <strong>PDF</strong> or <strong>plain text (.txt)</strong> files.
-          Other supported types (JPEG, PNG, WEBP) can be processed but may not be ideal for resumes.
-          The AI will attempt to process the document and extract key skills.
+          Upload your resume file (max {MAX_FILE_SIZE / (1024 * 1024)}MB). 
+          For best skill extraction, use <strong>PDF</strong> or <strong>plain text (.txt)</strong> files.
+          JPEG, PNG, and WEBP images are also accepted but may be less effective for resumes.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -155,9 +179,9 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isButtonDisabled}>
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isButtonDisabled || form.formState.isLoading}>
               <Send className="mr-2 h-4 w-4" />
-              {isButtonDisabled ? "Extracting..." : "Extract Skills"}
+              {(isButtonDisabled || form.formState.isLoading) ? "Extracting..." : "Extract Skills"}
             </Button>
           </CardFooter>
         </form>
@@ -165,3 +189,4 @@ export default function ResumeUploadSection({ setExtractedSkills, setIsLoading, 
     </Card>
   );
 }
+
